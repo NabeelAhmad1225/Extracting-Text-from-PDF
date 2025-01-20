@@ -1,36 +1,53 @@
-import React, { useState } from 'react';
-import mammoth from 'mammoth';
+import React, { useState, useEffect } from "react";
+import mammoth from "mammoth";
+import JSZip from "jszip";
 
 const ExtractedTextDocx = () => {
   const [file, setFile] = useState(null);
-  const [extractedContent, setExtractedContent] = useState("");
+  const [extractedText, setExtractedText] = useState(""); 
+  const [extractedImages, setExtractedImages] = useState([]);
 
   const handleFileChange = (event) => {
     setFile(event.target.files[0]);
   };
 
-  const handleExtractText = () => {
+  const handleExtractText = async () => {
     if (!file) {
       alert("Please select a DOCX file first.");
       return;
     }
 
-    // Use Mammoth to extract text and images from DOCX file
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const arrayBuffer = e.target.result;
+    try {
+      const arrayBuffer = await file.arrayBuffer();
 
-      mammoth.convertToHtml({ arrayBuffer, includeImages: true })
-        .then((result) => {
-          setExtractedContent(result.value); // HTML content (text + images)
-        })
-        .catch((error) => {
-          console.error("Failed to extract content from DOCX", error);
-        });
-    };
+      
+      const textResult = await mammoth.extractRawText({ arrayBuffer });
+      setExtractedText(textResult.value); 
 
-    reader.readAsArrayBuffer(file);
+     
+      const zip = await JSZip.loadAsync(arrayBuffer);
+      const images = [];
+      zip.folder("word/media").forEach(async (relativePath, file) => {
+        const base64Data = await file.async("base64");
+        images.push(`data:image/png;base64,${base64Data}`);
+        setExtractedImages([...images]);
+      });
+    } catch (error) {
+      console.error("Failed to extract content from DOCX", error);
+    }
   };
+
+  useEffect(() => {
+    if (extractedImages.length > 0) {
+      console.log("Extracted Images:", extractedImages);
+    }
+  }, [extractedImages]);
+
+  useEffect(() => {
+   
+      console.log("Extracted Text:", extractedText);
+    
+  }, [extractedText]);
 
   return (
     <div style={styles.container}>
@@ -44,11 +61,29 @@ const ExtractedTextDocx = () => {
       <button onClick={handleExtractText} style={styles.button}>
         Extract Content
       </button>
-      {extractedContent && (
+
+      
+      {extractedText && (
         <div
           style={styles.text}
-          dangerouslySetInnerHTML={{ __html: extractedContent }}
+          dangerouslySetInnerHTML={{ __html: extractedText }}
         />
+      )}
+
+     
+      {extractedImages.length > 0 && (
+        <div style={styles.imagesContainer}>
+          {extractedImages.map((image, index) => (
+            
+            <div key={index} style={styles.imageContainer}>
+              <img
+                src={image}
+                alt={`Extracted Image ${index + 1}`}
+                style={styles.image}
+              />
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -99,7 +134,22 @@ const styles = {
     border: "1px solid #ccc",
     borderRadius: "4px",
     boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-    whiteSpace: "pre-wrap", 
+    whiteSpace: "pre-wrap",
+  },
+  imagesContainer: {
+    marginTop: "20px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+  },
+  imageContainer: {
+    marginBottom: "10px",
+  },
+  image: {
+    maxWidth: "100%",
+    height: "auto",
+    border: "1px solid #ccc",
+    borderRadius: "4px",
   },
 };
 
